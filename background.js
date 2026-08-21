@@ -1,9 +1,10 @@
 // background.js
 
-const STORAGE_KEY = "claude_conversations";
+const STORAGE_KEY = "context_sync_conversations";
 const PENDING_INJECT_KEY = "pending_context_inject";
+const PENDING_INJECT_EXPIRY = 60000; // 60 seconds
 
-const GEMINI_API_KEY = ""; // keep as is
+const GEMINI_API_KEY = ""; // leave empty to disable compression
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
@@ -39,6 +40,24 @@ const AI_URLS = {
   chatgpt:  "https://chatgpt.com/",
   deepseek: "https://chat.deepseek.com/",
 };
+
+// ── Storage migration helper ────────────────────────────────────
+async function migrateStorageKeys() {
+  const oldKey = "claude_conversations";
+  return new Promise((resolve) => {
+    chrome.storage.local.get([oldKey], (result) => {
+      if (result[oldKey]) {
+        // Migrate old key to new key
+        chrome.storage.local.set({ [STORAGE_KEY]: result[oldKey] }, () => {
+          // Remove old key
+          chrome.storage.local.remove([oldKey], () => resolve());
+        });
+      } else {
+        resolve();
+      }
+    });
+  });
+}
 
 // ── Message listener ────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -94,8 +113,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
       }
 
-      // Store the pending context so the injector content script can pick it up
-      // Using chrome.storage.local (not .session) for reliable cross-context access in MV3
+      // Store pending context in chrome.storage.local with expiry timestamp
+      // FIX: unified use of chrome.storage.local (not .session) for MV3 reliability
       chrome.storage.local.set({ [PENDING_INJECT_KEY]: { target, context, ts: Date.now() } }, () => {
         chrome.tabs.create({ url: AI_URLS[target] }, (tab) => {
           sendResponse({ ok: true, tabId: tab.id });
@@ -109,3 +128,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
   }
 });
+
+// Run migration on extension load
+migrateStorageKeys();

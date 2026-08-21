@@ -20,6 +20,136 @@ function restoreCodeBlocks(text, blocks) {
   return result;
 }
 
+// ── Multi-format export helpers ────────────────────────────────────────────────
+function exportAsMarkdown(conversation) {
+  const lines = [];
+  lines.push(`# ${conversation.title || "Untitled Conversation"}`);
+  lines.push(``);
+  lines.push(`**Saved:** ${new Date(conversation.savedAt).toLocaleString()}`);
+  lines.push(`**Source:** ${conversation.source}`);
+  lines.push(``);
+  lines.push(`---`);
+  lines.push(``);
+
+  for (const msg of conversation.messages) {
+    const role = msg.type === "user" ? "**User**" : "**Assistant**";
+    lines.push(`${role}:`);
+    lines.push(``);
+    lines.push(msg.content);
+    lines.push(``);
+  }
+
+  return lines.join("\n");
+}
+
+function exportAsPlainText(conversation) {
+  const lines = [];
+  lines.push(`[${conversation.title || "Untitled Conversation"}]`);
+  lines.push(`Saved: ${new Date(conversation.savedAt).toLocaleString()}`);
+  lines.push(`Source: ${conversation.source}`);
+  lines.push(``);
+  lines.push(`${"-".repeat(60)}`);
+  lines.push(``);
+
+  for (const msg of conversation.messages) {
+    const role = msg.type === "user" ? "USER" : "ASSISTANT";
+    lines.push(`[${role}]`);
+    lines.push(msg.content);
+    lines.push(``);
+  }
+
+  return lines.join("\n");
+}
+
+function exportAsHTML(conversation) {
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(conversation.title || "Conversation")}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #fafafa;
+      color: #333;
+      line-height: 1.6;
+    }
+    .header {
+      border-bottom: 2px solid #ddd;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+    }
+    h1 { margin: 0 0 10px 0; color: #222; }
+    .meta { font-size: 12px; color: #666; }
+    .message {
+      margin: 15px 0;
+      padding: 12px 15px;
+      border-radius: 8px;
+      border-left: 4px solid #ddd;
+    }
+    .message.user {
+      background: #e3f2fd;
+      border-left-color: #2196F3;
+      margin-left: 40px;
+    }
+    .message.assistant {
+      background: #f5f5f5;
+      border-left-color: #666;
+      margin-right: 40px;
+    }
+    .message-role {
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      color: #555;
+    }
+    pre {
+      background: #222;
+      color: #0f0;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+    code {
+      font-family: "Courier New", monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${escapeHtml(conversation.title || "Untitled Conversation")}</h1>
+    <div class="meta">
+      <p>Saved: ${new Date(conversation.savedAt).toLocaleString()}</p>
+      <p>Source: ${escapeHtml(conversation.source)}</p>
+    </div>
+  </div>
+  <div class="messages">
+    ${conversation.messages.map(msg => `
+    <div class="message ${msg.type}">
+      <div class="message-role">${msg.type === "user" ? "You" : "Assistant"}</div>
+      <div>${escapeHtml(msg.content).replace(/\n/g, "<br>")}</div>
+    </div>
+    `).join("")}
+  </div>
+</body>
+</html>
+  `.trim();
+  return html;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 // ── Single-message compressor ─────────────────────────────────────────────────
 async function compressMessage(message) {
   const { content, type } = message;
@@ -87,7 +217,7 @@ const Capsule = {
 };
 
 // ── Storage ───────────────────────────────────────────────────────────────────
-const STORAGE_KEY = "claude_conversations";
+const STORAGE_KEY = "context_sync_conversations";
 const MAX_CONVERSATIONS = 50;
 
 function storageGetAll() {
@@ -160,7 +290,7 @@ async function scheduleConversationSave() {
     catch { messages = rawMessages; }
     const capsule = Capsule.build(messages, window.location.href);
     try { await storageSave(capsule); }
-    catch (err) { console.error("[ContextClaw] save failed:", err); }
+    catch (err) { console.error("[ContextSync] save failed:", err); }
   }, 1500);
 }
 
@@ -190,8 +320,7 @@ function formatContextBlock(conversation) {
   return lines.join("\n");
 }
 
-
-// ── Copy current chat to clipboard ──────────────────────────────────────────
+// ── Copy current chat to clipboard ────────────────────────────────────────────
 function copyCurrentChat() {
   const messages = scrapeMessages();
   if (!messages.length) { showToast("No messages found to copy."); return; }
@@ -211,24 +340,52 @@ function copyCurrentChat() {
   );
 }
 
-// ── Download current chat as JSON ──────────────────────────────────────────────
-function downloadCurrentChat() {
+// ── Download current chat (multiple formats) ───────────────────────────────────
+function downloadCurrentChat(format = "json") {
   const messages = scrapeMessages();
   if (!messages.length) { showToast("No messages found to download."); return; }
+  
   const capsule = Capsule.build(messages, window.location.href);
-  const blob = new Blob([JSON.stringify(capsule, null, 2)], { type: "application/json" });
+  const filename = capsule.title.replace(/[^\w\d]+/g, "_").slice(0, 50);
+  
+  let content, mimeType, ext;
+  
+  switch (format) {
+    case "markdown":
+      content = exportAsMarkdown(capsule);
+      mimeType = "text/markdown";
+      ext = ".md";
+      break;
+    case "text":
+      content = exportAsPlainText(capsule);
+      mimeType = "text/plain";
+      ext = ".txt";
+      break;
+    case "html":
+      content = exportAsHTML(capsule);
+      mimeType = "text/html";
+      ext = ".html";
+      break;
+    case "json":
+    default:
+      content = JSON.stringify(capsule, null, 2);
+      mimeType = "application/json";
+      ext = ".json";
+  }
+  
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${capsule.title.replace(/[^\w\d]+/g, "_").slice(0, 50)}.json`;
+  a.download = filename + ext;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showToast("✓ Downloading JSON…");
+  showToast(`✓ Downloaded as ${ext.toUpperCase().slice(1)}…`);
 }
 
-// ── Send to AI ────────────────────────────────────────────────────────────────
+// ── Send to AI ──────────────────────────────────────────────────────────────────
 async function sendToAI(target) {
   const all = await storageGetAll();
   if (!all.length) { showToast("⚠️ No saved conversations. Click Refresh in the popup first."); return; }
@@ -243,7 +400,7 @@ async function sendToAI(target) {
   });
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
+// ── Toast ──────────────────────────────────────────────────────────────────────
 function showToast(msg) {
   document.getElementById("cc-toast")?.remove();
   const t = document.createElement("div");
@@ -264,9 +421,9 @@ function showToast(msg) {
   setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 250); }, 2800);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ── BUTTON INJECTION ──────────────────────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
+// ── BUTTON INJECTION ────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════════
 
 const CC_BTN_ID = "cc-ask-ai-btn";
 const CC_PANEL_ID = "cc-ask-ai-panel";
@@ -477,17 +634,41 @@ function buildPanel() {
     panel.appendChild(opt);
   }
 
-  // ── Copy + Download inline row ──────────────────────────────────────────
+  // ── Export options row ──────────────────────────────────────────────────────
   const divider = document.createElement("div");
   divider.className = "cc-divider";
   panel.appendChild(divider);
 
-  const actionRow = document.createElement("div");
-  actionRow.className = "cc-action-row";
+  const exportRow = document.createElement("div");
+  exportRow.className = "cc-action-row";
+  exportRow.style.flexWrap = "wrap";
+
+  const formats = [
+    { id: "json", label: "JSON" },
+    { id: "markdown", label: "MD" },
+    { id: "text", label: "TXT" },
+    { id: "html", label: "HTML" },
+  ];
+
+  for (const fmt of formats) {
+    const btn = document.createElement("button");
+    btn.className = "cc-action-btn";
+    btn.type = "button";
+    btn.style.flex = "1 1 calc(50% - 2px)";
+    btn.title = `Download as ${fmt.label}`;
+    btn.textContent = fmt.label;
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      closePanel();
+      downloadCurrentChat(fmt.id);
+    });
+    exportRow.appendChild(btn);
+  }
 
   const copyBtn = document.createElement("button");
   copyBtn.className = "cc-action-btn";
   copyBtn.type = "button";
+  copyBtn.style.flex = "1";
   copyBtn.title = "Copy conversation to clipboard";
   copyBtn.innerHTML = `
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -502,29 +683,9 @@ function buildPanel() {
     closePanel();
     copyCurrentChat();
   });
+  exportRow.appendChild(copyBtn);
 
-  const dlBtn = document.createElement("button");
-  dlBtn.className = "cc-action-btn";
-  dlBtn.type = "button";
-  dlBtn.title = "Download conversation as JSON";
-  dlBtn.innerHTML = `
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 3v12"/><path d="m7 10 5 5 5-5"/>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-    </svg>
-    Download
-  `;
-  dlBtn.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    closePanel();
-    downloadCurrentChat();
-  });
-
-  actionRow.appendChild(copyBtn);
-  actionRow.appendChild(dlBtn);
-  panel.appendChild(actionRow);
-
+  panel.appendChild(exportRow);
   document.body.appendChild(panel);
   return panel;
 }
@@ -535,7 +696,7 @@ let _panelOpen = false;
 function openPanel(btn) {
   if (!_panel) _panel = buildPanel();
   const r = btn.getBoundingClientRect();
-  const panelH = 185;
+  const panelH = 220;
   if (r.top > panelH + 10) {
     _panel.style.bottom = `${window.innerHeight - r.top + 8}px`;
     _panel.style.top = "auto";
@@ -589,14 +750,14 @@ function injectButton() {
   slot.appendChild(btn);
 }
 
-// ── Message listener ──────────────────────────────────────────────────────────
+// ── Message listener ────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === "scrapeNow") { scheduleConversationSave(); sendResponse({ ok: true }); }
   if (message.action === "ping") { sendResponse({ ok: true, url: window.location.href }); }
   return false;
 });
 
-// ── MutationObserver ──────────────────────────────────────────────────────────
+// ── MutationObserver ────────────────────────────────────────────────────────────
 let _observer = null;
 
 function startObserver() {
@@ -610,7 +771,7 @@ function startObserver() {
   _observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// ── Init ────────────────────────────────────────────────────────────────────────
 function isConversationPage() {
   return (
     /\/chat\/|\/c\/|\/conversation/.test(window.location.pathname) ||
@@ -626,14 +787,15 @@ function retryInject() {
   if (!document.getElementById(CC_BTN_ID)) setTimeout(retryInject, 400);
 }
 
-// ── Pending context injection (receive context from other AIs) ────────────────
+// ── Pending context injection (receive context from other AIs) ─────────────────
+// FIX: Use chrome.storage.local (not .session) — unified approach for MV3 reliability
 function checkAndInjectPendingContext() {
   try {
-    chrome.storage.session.get(["pending_context_inject"], (result) => {
+    chrome.storage.local.get(["pending_context_inject"], (result) => {
       const pending = result["pending_context_inject"];
       if (!pending) return;
       if (pending.target !== "claude" || Date.now() - pending.ts > 60000) return;
-      chrome.storage.session.remove(["pending_context_inject"]);
+      chrome.storage.local.remove(["pending_context_inject"]);
 
       const context = pending.context;
       let attempts = 0;
@@ -658,7 +820,7 @@ function checkAndInjectPendingContext() {
       }, 500);
     });
   } catch (e) {
-    // chrome.storage.session may not be available in all contexts — silently fail
+    // Silently fail if storage is unavailable
   }
 }
 
@@ -700,4 +862,4 @@ const _navObserver = new MutationObserver(() => {
 });
 _navObserver.observe(document.documentElement, { childList: true, subtree: false });
 
-window.__contextClaw = { scrapeNow: scheduleConversationSave, scrapeMessages };
+window.__contextSync = { scrapeNow: scheduleConversationSave, scrapeMessages };

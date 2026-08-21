@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Context Sync",
-  "version": "1.2.0",
-  "description": "Automatically save and restore Claude.ai conversation context. Send context to Gemini, ChatGPT, or DeepSeek.",
+  "version": "2.0.0",
+  "description": "Automatically save and restore Claude.ai conversation context. Send context to Gemini, ChatGPT, or DeepSeek. Export as JSON, Markdown, HTML, or TXT.",
 
   "permissions": [
     "storage",
