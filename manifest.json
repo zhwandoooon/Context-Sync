@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Context Sync",
-  "version": "2.0.0",
-  "description": "Capture all AI conversations in real-time. Works logged in or as guest. Export to JSON, copy to clipboard, or sync across AI platforms.",
+  "version": "3.0.0",
+  "description": "Capture all AI conversations in real-time. Works logged in or as guest. Export to JSON, Markdown, HTML, TXT. Supports Google AI Mode.",
   "permissions": [
     "storage",
     "activeTab",
@@ -25,7 +25,11 @@
     "https://www.bing.com/chat*",
     "https://*.bing.com/chat*",
     "https://grok.com/*",
-    "https://*.grok.com/*"
+    "https://*.grok.com/*",
+    "https://google.com/ai*",
+    "https://google.com/search*",
+    "https://www.google.com/ai*",
+    "https://www.google.com/search*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -48,7 +52,11 @@
         "https://www.bing.com/chat*",
         "https://*.bing.com/chat*",
         "https://grok.com/*",
-        "https://*.grok.com/*"
+        "https://*.grok.com/*",
+        "https://google.com/ai*",
+        "https://google.com/search*",
+        "https://www.google.com/ai*",
+        "https://www.google.com/search*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle",
