@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Sync</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="header-info">
+      <h1>Context Sync</h1>
+      <p>Capture, export, and sync AI conversations</p>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn btn-primary" id="refreshBtn">
+      <span class="icon">&#128260;</span> Refresh
+    </button>
+    <button class="btn" id="exportAllBtn">
+      <span class="icon">&#128190;</span> Export All
+    </button>
+    <button class="btn btn-danger" id="clearAllBtn">
+      <span class="icon">&#128465;</span> Clear All
+    </button>
+  </div>
+
+  <div class="search-container">
+    <input type="text" id="searchInput" placeholder="&#128269; Search conversations...">
+  </div>
+
+  <div class="stats">
+    <span id="statsText">0 conversations</span>
+  </div>
+
+  <div class="conversations-container" id="conversationsContainer">
+    <div class="empty-state">
+      <div class="empty-icon">&#128172;</div>
+      <p>No conversations yet</p>
+      <p class="empty-subtitle">Start chatting on any supported AI platform</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>v2.0.0 | <a href="#" id="helpLink">Help</a></p>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
